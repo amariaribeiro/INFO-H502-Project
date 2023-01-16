@@ -1,6 +1,5 @@
 #include<iostream>
 
-//include glad before GLFW to avoid header conflict or define "#define GLFW_INCLUDE_NONE"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
@@ -24,6 +23,8 @@ const int height = 1000;
 GLuint compileShader(std::string shaderCode, GLenum shaderType);
 GLuint compileProgram(GLuint vertexShader, GLuint fragmentShader);
 void processInput(GLFWwindow* window);
+
+void defineTexture(GLuint& texture, const char* path);
 
 
 #ifndef NDEBUG
@@ -75,19 +76,11 @@ void APIENTRY glDebugOutput(GLenum source,
 }
 #endif
 
-Camera camera(glm::vec3(1.0, 0.0, -6.0),glm::vec3(0.0,1.0,0.0), 90.0);
+Camera camera(glm::vec3(1.0, 0.0, -6.0), glm::vec3(0.0, 1.0, 0.0), 90.0);
 
 
 int main(int argc, char* argv[])
 {
-	std::cout << "Welcome to exercice 4: " << std::endl;
-	std::cout << "Light - Diffuse Phong\n"
-		"Implement Phong shading on a sphere.\n"
-		"You need to :\n"
-		"	- compare the result with Gouraud, the light must be placed carefully to see the differences \n"
-		"	- find what is the difference between the sphere_coarse.obj and sphere_smooth.obj in the object directory?\n"
-		"	- compare Gouraud and Phong - rough idea of how many computations are needed for both ? \n";
-
 	//Boilerplate
 	//Create the OpenGL context 
 	if (!glfwInit()) {
@@ -104,7 +97,7 @@ int main(int argc, char* argv[])
 
 
 	//Create the window
-	GLFWwindow* window = glfwCreateWindow(width, height, "Solution 04", nullptr, nullptr);
+	GLFWwindow* window = glfwCreateWindow(width, height, "Project", nullptr, nullptr);
 	if (window == NULL)
 	{
 		glfwTerminate();
@@ -133,62 +126,77 @@ int main(int argc, char* argv[])
 	}
 #endif
 
-	const std::string sourceV = "#version 330 core\n"
+
+	// earth shader
+
+	const std::string v_earth = "#version 330 core\n"
 		"in vec3 position; \n"
 		"in vec2 tex_coord; \n"
 		"in vec3 normal; \n"
 
 		"out vec3 v_normal; \n"
 		"out vec3 v_frag_coord; \n"
+		"out vec2 v_tex; \n"
 
 		"uniform mat4 M; \n"
 		"uniform mat4 itM; \n"
 		"uniform mat4 V; \n"
 		"uniform mat4 P; \n"
-		
 
 		" void main(){ \n"
 		"vec4 frag_coord = M*vec4(position, 1.0);"
 		"gl_Position = P*V*frag_coord;\n"
 		//transform correctly the normals then send them to the fragment shader
 		"v_normal = vec3(itM * vec4(normal, 1.0)); \n"
-		"v_frag_coord = frag_coord.xyz; \n"
-		"}\n"; 
-	const std::string sourceF = "#version 330 core\n"
+		"v_tex = tex_coord; \n"
+		"v_frag_coord = position.xyz; \n"
+		"}\n";
+	const std::string f_earth = "#version 330 core\n"
 		"out vec4 FragColor;"
 		"precision mediump float; \n"
 		"in vec3 v_normal; \n"
 		"in vec3 v_frag_coord; \n"
+		"in vec2 v_tex; \n"
 
 		"uniform vec3 u_light_pos; \n"
+		"uniform sampler2D texture; \n"
 
 		"void main() { \n"
 		//2. compute the ligth using the interpolated normal
 		"vec3 L = normalize(u_light_pos - v_frag_coord); \n"
 		"float diffusion = max(0.0, dot(v_normal, L)); \n"
 		"vec3 color = vec3(diffusion); \n"
-		"FragColor = vec4(color, 1.0); \n"
+		"FragColor = texture(texture, v_tex); \n"
 		"} \n";
 
-	
-	Shader shader(sourceV, sourceF);
 
 
+	//Create and load the textures
+	GLuint earth_t;
+	defineTexture(earth_t, "../../../../Source/textures/earth.obj");
+
+	GLuint moon_t;
+	defineTexture(moon_t, "../../../../Source/textures/moon.jpg");
+
+
+	//Sphere objects path
 	char path1[] = "../../../../Source/objects/sphere_smooth.obj";
-	
+
+	Shader earthShader = Shader(v_earth, f_earth);
+
+	Object moon1(path1);
+	moon1.makeObject(earthShader);
+	moon1.model = glm::translate(moon1.model, glm::vec3(1.0, 0.0, -3.0));
+	moon1.model = glm::scale(moon1.model, glm::vec3(0.2, 0.2, 0.2));
+
 	Object planet(path1);
-	planet.makeObject(shader);
+	planet.makeObject(earthShader);
 	planet.model = glm::translate(planet.model, glm::vec3(1.0, 0.0, 0.0));
 	planet.model = glm::scale(planet.model, glm::vec3(1.5, 1.5, 1.5));
 
-	Object moon1(path1);
-	moon1.makeObject(shader);
-	moon1.model = glm::translate(moon1.model, glm::vec3(1.0, 0.0, -3.0));
-	moon1.model = glm::scale(moon1.model, glm::vec3(0.2, 0.2, 0.2));	
-
 
 	const glm::vec3 light_pos = glm::vec3(0.5, 5.0, -0.7);
-	
+
 
 	double prev = 0;
 	int deltaFrame = 0;
@@ -221,33 +229,49 @@ int main(int argc, char* argv[])
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 
-		//2. Use the shader Class to send the uniform
-		shader.use();
+		earthShader.use();
 
-		shader.setMatrix4("M", planet.model);
-		shader.setMatrix4("V", view);
-		shader.setMatrix4("P", perspective);
-		shader.setVector3f("u_light_pos", light_pos);
+		earthShader.setMatrix4("M", planet.model);
+		earthShader.setMatrix4("V", view);
+		earthShader.setMatrix4("P", perspective);
+		earthShader.setVector3f("u_light_pos", light_pos);
 
-		//planet rotation around itself
-		planet.model = glm::rotate(planet.model, glm::radians((float)(4.0f)), glm::vec3(0.0, 1.0, 0.0));
+		//earth rotation around itself
+		planet.model = glm::rotate(planet.model, glm::radians((float)(0.5f)), glm::vec3(0.0, 1.0, 0.0));
 
 		glm::mat4 itM = glm::inverseTranspose(planet.model);
-		shader.setMatrix4("itM", itM);
-		planet.draw();
-		
-		//moon rotation around the planet
-		moon1.model = glm::translate(moon1.model, glm::vec3(1.0, 0.0, 9.0));
-		moon1.model = glm::rotate(moon1.model, glm::radians((float)(3.0f)), glm::vec3(0.0, 1.0, 0.0));
-		moon1.model = glm::translate(moon1.model, glm::vec3(-1.0, 0.0, -9.0));
+		earthShader.setMatrix4("itM", itM);
 
-		shader.setMatrix4("M", moon1.model);
-		shader.setMatrix4("itM", glm::inverseTranspose(moon1.model));
+		//earth texture
+		glBindTexture(GL_TEXTURE_2D, earth_t);
+
+		planet.draw();
+
+		earthShader.use();
+
+		earthShader.setMatrix4("M", moon1.model);
+		earthShader.setMatrix4("V", view);
+		earthShader.setMatrix4("P", perspective);
+		earthShader.setVector3f("u_light_pos", light_pos);
+
+		//moon rotation around the earth
+		moon1.model = glm::translate(moon1.model, glm::vec3(1.0, 0.0, 10.0));
+		moon1.model = glm::rotate(moon1.model, glm::radians((float)(3.0f)), glm::vec3(0.5, 1.0, 0.0));
+		moon1.model = glm::translate(moon1.model, glm::vec3(-1.0, 0.0, -10.0));
+
+
+		earthShader.setMatrix4("M", moon1.model);
+		earthShader.setMatrix4("itM", glm::inverseTranspose(moon1.model));
+
+		//moon texture
+		glBindTexture(GL_TEXTURE_2D, moon_t);
+
 		moon1.draw();
 
 
 		fps(now);
 		glfwSwapBuffers(window);
+
 	}
 
 	//clean up ressource
@@ -259,7 +283,6 @@ int main(int argc, char* argv[])
 
 
 void processInput(GLFWwindow* window) {
-	//3. Use the cameras class to change the parameters of the camera
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 
@@ -274,9 +297,9 @@ void processInput(GLFWwindow* window) {
 		camera.ProcessKeyboardMovement(BACKWARD, 0.1);
 
 	if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-		camera.ProcessKeyboardRotation(1, 0.0,1);
+		camera.ProcessKeyboardRotation(1, 0.0, 1);
 	if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-		camera.ProcessKeyboardRotation(-1, 0.0,1);
+		camera.ProcessKeyboardRotation(-1, 0.0, 1);
 
 	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
 		camera.ProcessKeyboardRotation(0.0, 1.0, 1);
@@ -286,3 +309,26 @@ void processInput(GLFWwindow* window) {
 
 }
 
+void defineTexture(GLuint& texture, const char* path) {
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	int width, height, nrChannels;
+	stbi_set_flip_vertically_on_load(true);
+
+	unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
+	if (data) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else {
+		std::cout << "Failed to Load texture" << std::endl;
+		const char* reason = stbi_failure_reason();
+		std::cout << reason << std::endl;
+	}
+	stbi_image_free(data);
+}
