@@ -10,8 +10,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 #define some variable
-set(COMPILE_LAB02 ON CACHE BOOL "Compile the second Lab")
-set(COMPILE_LAB03 ON CACHE BOOL "Compile the third Lab")
+set(COMPILE_SOURCE ON CACHE BOOL "Compile the third Lab")
 set(COMPILE_SOLUTIONS ON CACHE BOOL "Compile the solutions")
 
 
@@ -35,11 +34,6 @@ include_directories(3rdParty/glad/include/
                     3rdParty/glm/
                     3rdParty/stb/)
 
-
-if(COMPILE_LAB02)
-	add_subdirectory(LAB02)
-endif()
-
-if(COMPILE_LAB03)
-	add_subdirectory(LAB03)
+if(COMPILE_SOURCE)
+	add_subdirectory(SOURCE)
 endif()

@@ -12,9 +12,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include "../../camera.h"
-#include "../../shader.h"
-#include "../object.h"
+#include "camera.h"
+#include "shader.h"
+#include "object.h"
 
 
 const int width = 1000;
@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
 	Shader shader(sourceV, sourceF);
 
 
-	char path1[] = "../../../../LAB03/objects/sphere_smooth.obj";
+	char path1[] = "../../../../Source/objects/sphere_smooth.obj";
 	
 	Object planet(path1);
 	planet.makeObject(shader);
