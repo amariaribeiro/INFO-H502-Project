@@ -138,6 +138,7 @@ int main(int argc, char* argv[])
 		"out vec3 v_frag_coord; \n"
 		"out vec2 v_tex; \n"
 
+
 		"uniform mat4 M; \n"
 		"uniform mat4 itM; \n"
 		"uniform mat4 V; \n"
@@ -146,34 +147,68 @@ int main(int argc, char* argv[])
 		" void main(){ \n"
 		"vec4 frag_coord = M*vec4(position, 1.0);"
 		"gl_Position = P*V*frag_coord;\n"
-		//transform correctly the normals then send them to the fragment shader
 		"v_normal = vec3(itM * vec4(normal, 1.0)); \n"
+		"v_frag_coord = frag_coord.xyz; \n"
+		"\n"
 		"v_tex = tex_coord; \n"
-		"v_frag_coord = position.xyz; \n"
 		"}\n";
 	const std::string f_earth = "#version 330 core\n"
 		"out vec4 FragColor;"
 		"precision mediump float; \n"
+
 		"in vec3 v_normal; \n"
 		"in vec3 v_frag_coord; \n"
 		"in vec2 v_tex; \n"
 
-		"uniform vec3 u_light_pos; \n"
 		"uniform sampler2D texture; \n"
+		"uniform vec3 materialColour; \n"
+
+		"uniform vec3 u_view_pos; \n"
+
+		//for the light equation
+
+		"struct Light{\n"
+		"vec3 light_pos; \n"
+		"float ambient_strength; \n"
+		"float diffuse_strength; \n"
+		"float specular_strength; \n"
+		//attenuation factor
+		"float constant;\n"
+		"float linear;\n"
+		"float quadratic;\n"
+		"};\n"
+		"uniform Light light;"
+
+		"uniform float shininess; \n"
+
+		"float specularCalculation(vec3 N, vec3 L, vec3 V ){ \n"
+		"vec3 R = reflect (-L,N);  \n " //reflect (-L,N) is  equivalent to //max (2 * dot(N,L) * N - L , 0.0) ;
+		"float cosTheta = dot(R , V); \n"
+		"float spec = pow(max(cosTheta,0.0), 32.0); \n"
+		"return light.specular_strength * spec;\n"
+		"}\n"
+
 
 		"void main() { \n"
-		//2. compute the ligth using the interpolated normal
-		"vec3 L = normalize(u_light_pos - v_frag_coord); \n"
-		"float diffusion = max(0.0, dot(v_normal, L)); \n"
-		"vec3 color = vec3(diffusion); \n"
-		"FragColor = texture(texture, v_tex); \n"
+		//computing light components
+		"vec3 N = normalize(v_normal);\n"
+		"vec3 L = normalize(light.light_pos - v_frag_coord) ; \n"
+		"vec3 V = normalize(u_view_pos - v_frag_coord); \n"
+		"float specular = specularCalculation(N, L, V); \n"
+		"float diffuse = light.diffuse_strength * max(dot(N,L),0.0);\n"
+		"float distance = length(light.light_pos - v_frag_coord);"
+		"float attenuation = 1 / (light.constant + light.linear * distance + light.quadratic * distance * distance);"
+		"float light = light.ambient_strength + attenuation * (diffuse + specular); \n"
+
+		//applying light to object texture
+		"FragColor = texture(texture, v_tex) * vec4(light); \n"
 		"} \n";
 
 
 
 	//Create and load the textures
 	GLuint earth_t;
-	defineTexture(earth_t, "../../../../Source/textures/earth.obj");
+	defineTexture(earth_t, "../../../../Source/textures/earth.jpg");
 
 	GLuint moon_t;
 	defineTexture(moon_t, "../../../../Source/textures/moon.jpg");
@@ -195,7 +230,7 @@ int main(int argc, char* argv[])
 	planet.model = glm::scale(planet.model, glm::vec3(1.5, 1.5, 1.5));
 
 
-	const glm::vec3 light_pos = glm::vec3(0.5, 5.0, -0.7);
+	const glm::vec3 light_pos = glm::vec3(-5.0, 0.0, -1.5);
 
 
 	double prev = 0;
@@ -215,8 +250,28 @@ int main(int argc, char* argv[])
 	glm::mat4 view = camera.GetViewMatrix();
 	glm::mat4 perspective = camera.GetProjectionMatrix();
 
+	glm::vec3 materialColour = glm::vec3(0.0, 1.0, 0.0);
+
+	// light constants strengths
+	float ambient = 0.2;
+	float diffuse = 1.0;
+	float specular = 0.9;
+
 
 	//Rendering
+
+	//defining objects attributes
+
+	earthShader.use();
+
+	earthShader.setFloat("shininess", 32.0f);
+	earthShader.setFloat("light.ambient_strength", ambient);
+	earthShader.setFloat("light.diffuse_strength", diffuse);
+	earthShader.setFloat("light.specular_strength", specular);
+	earthShader.setFloat("light.constant", 0.5);
+	earthShader.setFloat("light.linear", 0.40);
+	earthShader.setFloat("light.quadratic", 0.03);
+
 
 	glfwSwapInterval(1);
 
@@ -234,13 +289,15 @@ int main(int argc, char* argv[])
 		earthShader.setMatrix4("M", planet.model);
 		earthShader.setMatrix4("V", view);
 		earthShader.setMatrix4("P", perspective);
-		earthShader.setVector3f("u_light_pos", light_pos);
-
-		//earth rotation around itself
-		planet.model = glm::rotate(planet.model, glm::radians((float)(0.5f)), glm::vec3(0.0, 1.0, 0.0));
+		earthShader.setVector3f("u_view_pos", camera.Position);
+		//earthShader.setVector3f("u_light_pos", light_pos);
+		earthShader.setVector3f("light.light_pos", light_pos);
 
 		glm::mat4 itM = glm::inverseTranspose(planet.model);
 		earthShader.setMatrix4("itM", itM);
+
+		//earth rotation around itself
+		planet.model = glm::rotate(planet.model, glm::radians((float)(0.5f)), glm::vec3(0.0, 1.0, 0.0));
 
 		//earth texture
 		glBindTexture(GL_TEXTURE_2D, earth_t);
@@ -254,14 +311,13 @@ int main(int argc, char* argv[])
 		earthShader.setMatrix4("P", perspective);
 		earthShader.setVector3f("u_light_pos", light_pos);
 
+		earthShader.setMatrix4("M", moon1.model);
+		earthShader.setMatrix4("itM", glm::inverseTranspose(moon1.model));
+
 		//moon rotation around the earth
 		moon1.model = glm::translate(moon1.model, glm::vec3(1.0, 0.0, 10.0));
 		moon1.model = glm::rotate(moon1.model, glm::radians((float)(3.0f)), glm::vec3(0.5, 1.0, 0.0));
 		moon1.model = glm::translate(moon1.model, glm::vec3(-1.0, 0.0, -10.0));
-
-
-		earthShader.setMatrix4("M", moon1.model);
-		earthShader.setMatrix4("itM", glm::inverseTranspose(moon1.model));
 
 		//moon texture
 		glBindTexture(GL_TEXTURE_2D, moon_t);
