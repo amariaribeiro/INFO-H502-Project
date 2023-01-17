@@ -209,20 +209,7 @@ int main(int argc, char* argv[])
 		"} \n";
 
 
-
-	//Create and load the textures
-	GLuint earth_t;
-	defineTexture(earth_t, "../../../../Source/textures/earth.jpg");
-
-	GLuint moon_t;
-	defineTexture(moon_t, "../../../../Source/textures/moon.jpg");
-
-
-	//Sphere objects path
-	char path1[] = "../../../../Source/objects/sphere_smooth.obj";
-
-	Shader earthShader = Shader(v_earth, f_earth);
-
+	//for the cubemap
 	const std::string sourceVCubeMap = "#version 330 core\n"
 		"in vec3 position; \n"
 		"in vec2 tex_coords; \n"
@@ -257,6 +244,110 @@ int main(int argc, char* argv[])
 		"FragColor = texture(cubemapSampler,texCoord_v); \n"
 		"} \n";
 
+	//reflection object
+
+	const std::string reflV = "#version 330 core\n"
+		"in vec3 position; \n"
+		"in vec2 tex_coords; \n"
+		"in vec3 normal; \n"
+
+		"out vec3 v_frag_coord; \n"
+		"out vec3 v_normal; \n"
+
+		"uniform mat4 M; \n"
+		"uniform mat4 itM; \n"
+		"uniform mat4 V; \n"
+		"uniform mat4 P; \n"
+
+
+		" void main(){ \n"
+		"vec4 frag_coord = M*vec4(position, 1.0); \n"
+		"gl_Position = P*V*frag_coord; \n"
+		"v_normal = vec3(itM * vec4(normal, 1.0)); \n"
+		"v_frag_coord = frag_coord.xyz; \n"
+		"\n"
+		"}\n";
+
+	const std::string reflF = "#version 400 core\n"
+		"out vec4 FragColor;\n"
+		"precision mediump float; \n"
+
+		"in vec3 v_frag_coord; \n"
+		"in vec3 v_normal; \n"
+
+		"uniform vec3 u_view_pos; \n"
+
+		"uniform samplerCube cubemapSampler; \n"
+
+
+		"void main() { \n"
+		"vec3 N = normalize(v_normal);\n"
+		"vec3 V = normalize(u_view_pos - v_frag_coord); \n"
+		"vec3 R = reflect(-V,N); \n"
+		"FragColor = texture(cubemapSampler,R); \n"
+		"} \n";
+
+	// for refraction
+	const std::string refrV = "#version 330 core\n"
+		"in vec3 position; \n"
+		"in vec2 tex_coords; \n"
+		"in vec3 normal; \n"
+
+		"out vec3 v_frag_coord; \n"
+		"out vec3 v_normal; \n"
+
+
+		"uniform mat4 M; \n"
+		"uniform mat4 itM; \n"
+		"uniform mat4 V; \n"
+		"uniform mat4 P; \n"
+
+
+		" void main(){ \n"
+		"vec4 frag_coord = M*vec4(position, 1.0); \n"
+		"gl_Position = P*V*frag_coord; \n"
+		"v_normal = vec3(itM * vec4(normal, 1.0)); \n"
+		"v_frag_coord = frag_coord.xyz; \n"
+		"\n"
+		"}\n";
+
+	const std::string refrF = "#version 400 core\n"
+		"out vec4 FragColor;\n"
+		"precision mediump float; \n"
+
+		"in vec3 v_frag_coord; \n"
+		"in vec3 v_normal; \n"
+
+		"uniform vec3 u_view_pos; \n"
+
+		"uniform samplerCube cubemapSampler; \n"
+		"uniform float refractionIndice;\n"
+
+		"void main() { \n"
+		"float ratio = 1.00 / refractionIndice;\n"
+		"vec3 N = normalize(v_normal);\n"
+		"vec3 V = normalize(u_view_pos - v_frag_coord); \n"
+		"vec3 R = refract(-V,N,ratio); \n"
+		"FragColor = texture(cubemapSampler,R); \n"
+		"} \n";
+
+
+	//Create and load the textures
+	GLuint earth_t;
+	defineTexture(earth_t, "../../../../Source/textures/earth.jpg");
+
+	GLuint moon_t;
+	defineTexture(moon_t, "../../../../Source/textures/moon.jpg");
+
+
+	//Sphere objects path
+	char path1[] = "../../../../Source/objects/sphere_smooth.obj";
+
+	//path bunny
+	char path2[] = "../../../../Source/objects/bunny_small.obj";
+
+	Shader earthShader = Shader(v_earth, f_earth);
+
 	Object moon1(path1);
 	moon1.makeObject(earthShader);
 	moon1.model = glm::translate(moon1.model, glm::vec3(1.0, 0.0, -3.0));
@@ -266,6 +357,61 @@ int main(int argc, char* argv[])
 	planet.makeObject(earthShader);
 	planet.model = glm::translate(planet.model, glm::vec3(1.0, 0.0, 0.0));
 	planet.model = glm::scale(planet.model, glm::vec3(1.5, 1.5, 1.5));
+
+	//Reflection
+	Shader reflShader = Shader(reflV, reflF);
+
+	Object alien(path2);
+	alien.makeObject(reflShader);
+	alien.model = glm::translate(alien.model, glm::vec3(0.0, 1.0, - 2.5));
+	alien.model = glm::scale(alien.model, glm::vec3(0.1, 0.1, 0.1));
+
+	//Refraction
+	Shader refrShader = Shader(refrV, refrF);
+
+	Object alien2(path1);
+	alien2.makeObject(refrShader);
+	alien2.model = glm::translate(alien2.model, glm::vec3(2.0, -1.0, -2.5));
+	alien2.model = glm::scale(alien2.model, glm::vec3(0.1, 0.1, 0.1));
+
+	
+
+	//CubeMap
+
+	Shader cubeMapShader = Shader(sourceVCubeMap, sourceFCubeMap);
+
+	char pathCube[] = PATH_TO_OBJECTS "/cube.obj";
+	Object cubeMap(pathCube);
+	cubeMap.makeObject(cubeMapShader);
+
+	GLuint cubeMapTexture;
+	glGenTextures(1, &cubeMapTexture);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+
+	// texture parameters
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	stbi_set_flip_vertically_on_load(false);
+
+	std::string pathToCubeMap = PATH_TO_TEXTURE "/cubemaps/space/";
+
+	std::map<std::string, GLenum> facesToLoad = {
+		{pathToCubeMap + "space1.png",GL_TEXTURE_CUBE_MAP_POSITIVE_X},
+		{pathToCubeMap + "space5.png",GL_TEXTURE_CUBE_MAP_POSITIVE_Y},
+		{pathToCubeMap + "space2.png",GL_TEXTURE_CUBE_MAP_POSITIVE_Z},
+		{pathToCubeMap + "space3.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_X},
+		{pathToCubeMap + "space6.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_Y},
+		{pathToCubeMap + "space4.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_Z},
+	};
+	//load the six faces
+	for (std::pair<std::string, GLenum> pair : facesToLoad) {
+		loadCubemapFace(pair.first.c_str(), pair.second);
+	}
 
 
 	const glm::vec3 light_pos = glm::vec3(-5.0, 0.0, -1.5);
@@ -295,47 +441,12 @@ int main(int argc, char* argv[])
 	float diffuse = 1.0;
 	float specular = 0.9;
 
-
-	//CubeMap
-
-	Shader cubeMapShader = Shader(sourceVCubeMap, sourceFCubeMap);
-
-	char pathCube[] = PATH_TO_OBJECTS "/cube.obj";
-	Object cubeMap(pathCube);
-	cubeMap.makeObject(cubeMapShader);
-	
-	GLuint cubeMapTexture;
-	glGenTextures(1, &cubeMapTexture);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
-
-	// texture parameters
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	stbi_set_flip_vertically_on_load(false);
-
-	std::string pathToCubeMap = PATH_TO_TEXTURE "/cubemaps/space/";
-
-	std::map<std::string, GLenum> facesToLoad = {
-		{pathToCubeMap + "space1.png",GL_TEXTURE_CUBE_MAP_POSITIVE_X}, 
-		{pathToCubeMap + "space5.png",GL_TEXTURE_CUBE_MAP_POSITIVE_Y}, 
-		{pathToCubeMap + "space2.png",GL_TEXTURE_CUBE_MAP_POSITIVE_Z}, 
-		{pathToCubeMap + "space3.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_X}, 
-		{pathToCubeMap + "space6.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_Y}, 
-		{pathToCubeMap + "space4.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_Z}, 
-	};
-	//load the six faces
-	for (std::pair<std::string, GLenum> pair : facesToLoad) {
-		loadCubemapFace(pair.first.c_str(), pair.second);
-	}
-
 	//Rendering
 
 	//defining objects attributes
+
+	refrShader.use();
+	refrShader.setFloat("refractionIndice", 1.52);
 
 	earthShader.use();
 
@@ -346,6 +457,8 @@ int main(int argc, char* argv[])
 	earthShader.setFloat("light.constant", 0.5);
 	earthShader.setFloat("light.linear", 0.40);
 	earthShader.setFloat("light.quadratic", 0.03);
+
+	
 
 
 	glfwSwapInterval(1);
@@ -399,6 +512,48 @@ int main(int argc, char* argv[])
 
 		glDepthFunc(GL_LEQUAL);
 		moon1.draw();
+
+		//reflective alien
+
+		reflShader.use();
+
+		reflShader.setMatrix4("M", alien.model);
+		reflShader.setMatrix4("V", view);
+		reflShader.setMatrix4("P", perspective);
+
+		reflShader.setMatrix4("M", alien.model);
+		reflShader.setMatrix4("itM", glm::inverseTranspose(alien.model));
+
+		alien.model = glm::rotate(alien.model, glm::radians((float)(3.0f)), glm::vec3(1.0, 0.0, 1.0));
+
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+		cubeMapShader.setInteger("cubemapTexture", 0);
+
+		alien.draw();
+
+		//refractive
+
+		refrShader.use();
+
+		refrShader.setMatrix4("M", alien2.model);
+		refrShader.setMatrix4("V", view);
+		refrShader.setMatrix4("P", perspective);
+
+		refrShader.setMatrix4("M", alien2.model);
+		refrShader.setMatrix4("itM", glm::inverseTranspose(alien2.model));
+
+		alien2.model = glm::translate(alien2.model, glm::vec3(1.0, 0.0, 1.0));
+		alien2.model = glm::rotate(alien2.model, glm::radians((float)(2.0f)), glm::vec3(0.0, -1.0, 0.0));
+		alien2.model = glm::translate(alien2.model, glm::vec3(-1.0, 0.0, -1.0));
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+		cubeMapShader.setInteger("cubemapTexture", 0);
+		
+		glDepthFunc(GL_LEQUAL);
+		alien2.draw();
 
 		cubeMapShader.use();
 		cubeMapShader.setMatrix4("V", view);
