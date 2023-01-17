@@ -16,12 +16,15 @@
 #include "camera.h"
 #include "shader.h"
 #include "object.h"
+#include "shaderInput.h"
+#include "lightInput.h"
 
 
 const int width = 1000;
 const int height = 1000;
 
-//Shader shader;
+ShaderInput shaderInput;
+LightInput lightInput;
 
 GLuint compileShader(std::string shaderCode, GLenum shaderType);
 GLuint compileProgram(GLuint vertexShader, GLuint fragmentShader);
@@ -130,208 +133,6 @@ int main(int argc, char* argv[])
 	}
 #endif
 
-
-	// earth shader
-
-	const std::string v_earth = "#version 330 core\n"
-		"in vec3 position; \n"
-		"in vec2 tex_coord; \n"
-		"in vec3 normal; \n"
-
-		"out vec3 v_normal; \n"
-		"out vec3 v_frag_coord; \n"
-		"out vec2 v_tex; \n"
-
-
-		"uniform mat4 M; \n"
-		"uniform mat4 itM; \n"
-		"uniform mat4 V; \n"
-		"uniform mat4 P; \n"
-
-		" void main(){ \n"
-		"vec4 frag_coord = M*vec4(position, 1.0);"
-		"gl_Position = P*V*frag_coord;\n"
-		"v_normal = vec3(itM * vec4(normal, 1.0)); \n"
-		"v_frag_coord = frag_coord.xyz; \n"
-		"\n"
-		"v_tex = tex_coord; \n"
-		"}\n";
-	const std::string f_earth = "#version 330 core\n"
-		"out vec4 FragColor;"
-		"precision mediump float; \n"
-
-		"in vec3 v_normal; \n"
-		"in vec3 v_frag_coord; \n"
-		"in vec2 v_tex; \n"
-
-		"uniform sampler2D texture; \n"
-		"uniform vec3 materialColour; \n"
-
-		"uniform vec3 u_view_pos; \n"
-
-		//for the light equation
-
-		"struct Light{\n"
-		"vec3 light_pos; \n"
-		"float ambient_strength; \n"
-		"float diffuse_strength; \n"
-		"float specular_strength; \n"
-		//attenuation factor
-		"float constant;\n"
-		"float linear;\n"
-		"float quadratic;\n"
-		"};\n"
-		"uniform Light light;"
-
-		"uniform float shininess; \n"
-
-		"float specularCalculation(vec3 N, vec3 L, vec3 V ){ \n"
-		"vec3 R = reflect (-L,N);  \n " //reflect (-L,N) is  equivalent to //max (2 * dot(N,L) * N - L , 0.0) ;
-		"float cosTheta = dot(R , V); \n"
-		"float spec = pow(max(cosTheta,0.0), 32.0); \n"
-		"return light.specular_strength * spec;\n"
-		"}\n"
-
-
-		"void main() { \n"
-		//computing light components
-		"vec3 N = normalize(v_normal);\n"
-		"vec3 L = normalize(light.light_pos - v_frag_coord) ; \n"
-		"vec3 V = normalize(u_view_pos - v_frag_coord); \n"
-		"float specular = specularCalculation(N, L, V); \n"
-		"float diffuse = light.diffuse_strength * max(dot(N,L),0.0);\n"
-		"float distance = length(light.light_pos - v_frag_coord);"
-		"float attenuation = 1 / (light.constant + light.linear * distance + light.quadratic * distance * distance);"
-		"float light = light.ambient_strength + attenuation * (diffuse + specular); \n"
-
-		//applying light to object texture
-		"FragColor = texture(texture, v_tex) * vec4(light); \n"
-		"} \n";
-
-
-	//for the cubemap
-	const std::string sourceVCubeMap = "#version 330 core\n"
-		"in vec3 position; \n"
-		"in vec2 tex_coords; \n"
-		"in vec3 normal; \n"
-
-		//only P and V are necessary
-		"uniform mat4 V; \n"
-		"uniform mat4 P; \n"
-
-		"out vec3 texCoord_v; \n"
-
-		" void main(){ \n"
-		"texCoord_v = position;\n"
-		//remove translation info from view matrix to only keep rotation
-		"mat4 V_no_rot = mat4(mat3(V)) ;\n"
-		"vec4 pos = P * V_no_rot * vec4(position, 1.0); \n"
-		// the positions xyz are divided by w after the vertex shader
-		// the z component is equal to the depth value
-		// we want a z always equal to 1.0 here, so we set z = w!
-		// Remember: z=1.0 is the MAXIMUM depth value ;)
-		"gl_Position = pos.xyww;\n"
-		"\n"
-		"}\n";
-
-	const std::string sourceFCubeMap =
-		"#version 330 core\n"
-		"out vec4 FragColor;\n"
-		"precision mediump float; \n"
-		"uniform samplerCube cubemapSampler; \n"
-		"in vec3 texCoord_v; \n"
-		"void main() { \n"
-		"FragColor = texture(cubemapSampler,texCoord_v); \n"
-		"} \n";
-
-	//reflection object
-
-	const std::string reflV = "#version 330 core\n"
-		"in vec3 position; \n"
-		"in vec2 tex_coords; \n"
-		"in vec3 normal; \n"
-
-		"out vec3 v_frag_coord; \n"
-		"out vec3 v_normal; \n"
-
-		"uniform mat4 M; \n"
-		"uniform mat4 itM; \n"
-		"uniform mat4 V; \n"
-		"uniform mat4 P; \n"
-
-
-		" void main(){ \n"
-		"vec4 frag_coord = M*vec4(position, 1.0); \n"
-		"gl_Position = P*V*frag_coord; \n"
-		"v_normal = vec3(itM * vec4(normal, 1.0)); \n"
-		"v_frag_coord = frag_coord.xyz; \n"
-		"\n"
-		"}\n";
-
-	const std::string reflF = "#version 400 core\n"
-		"out vec4 FragColor;\n"
-		"precision mediump float; \n"
-
-		"in vec3 v_frag_coord; \n"
-		"in vec3 v_normal; \n"
-
-		"uniform vec3 u_view_pos; \n"
-
-		"uniform samplerCube cubemapSampler; \n"
-
-
-		"void main() { \n"
-		"vec3 N = normalize(v_normal);\n"
-		"vec3 V = normalize(u_view_pos - v_frag_coord); \n"
-		"vec3 R = reflect(-V,N); \n"
-		"FragColor = texture(cubemapSampler,R); \n"
-		"} \n";
-
-	// for refraction
-	const std::string refrV = "#version 330 core\n"
-		"in vec3 position; \n"
-		"in vec2 tex_coords; \n"
-		"in vec3 normal; \n"
-
-		"out vec3 v_frag_coord; \n"
-		"out vec3 v_normal; \n"
-
-
-		"uniform mat4 M; \n"
-		"uniform mat4 itM; \n"
-		"uniform mat4 V; \n"
-		"uniform mat4 P; \n"
-
-
-		" void main(){ \n"
-		"vec4 frag_coord = M*vec4(position, 1.0); \n"
-		"gl_Position = P*V*frag_coord; \n"
-		"v_normal = vec3(itM * vec4(normal, 1.0)); \n"
-		"v_frag_coord = frag_coord.xyz; \n"
-		"\n"
-		"}\n";
-
-	const std::string refrF = "#version 400 core\n"
-		"out vec4 FragColor;\n"
-		"precision mediump float; \n"
-
-		"in vec3 v_frag_coord; \n"
-		"in vec3 v_normal; \n"
-
-		"uniform vec3 u_view_pos; \n"
-
-		"uniform samplerCube cubemapSampler; \n"
-		"uniform float refractionIndice;\n"
-
-		"void main() { \n"
-		"float ratio = 1.00 / refractionIndice;\n"
-		"vec3 N = normalize(v_normal);\n"
-		"vec3 V = normalize(u_view_pos - v_frag_coord); \n"
-		"vec3 R = refract(-V,N,ratio); \n"
-		"FragColor = texture(cubemapSampler,R); \n"
-		"} \n";
-
-
 	//Create and load the textures
 	GLuint earth_t;
 	defineTexture(earth_t, "../../../../Source/textures/earth.jpg");
@@ -346,7 +147,7 @@ int main(int argc, char* argv[])
 	//path bunny
 	char path2[] = "../../../../Source/objects/bunny_small.obj";
 
-	Shader earthShader = Shader(v_earth, f_earth);
+	Shader earthShader = Shader(shaderInput.v_earth, shaderInput.f_earth);
 
 	Object moon1(path1);
 	moon1.makeObject(earthShader);
@@ -359,7 +160,7 @@ int main(int argc, char* argv[])
 	planet.model = glm::scale(planet.model, glm::vec3(1.5, 1.5, 1.5));
 
 	//Reflection
-	Shader reflShader = Shader(reflV, reflF);
+	Shader reflShader = Shader(lightInput.reflV, lightInput.reflF);
 
 	Object alien(path2);
 	alien.makeObject(reflShader);
@@ -367,7 +168,7 @@ int main(int argc, char* argv[])
 	alien.model = glm::scale(alien.model, glm::vec3(0.1, 0.1, 0.1));
 
 	//Refraction
-	Shader refrShader = Shader(refrV, refrF);
+	Shader refrShader = Shader(lightInput.refrV, lightInput.refrF);
 
 	Object alien2(path1);
 	alien2.makeObject(refrShader);
@@ -378,7 +179,7 @@ int main(int argc, char* argv[])
 
 	//CubeMap
 
-	Shader cubeMapShader = Shader(sourceVCubeMap, sourceFCubeMap);
+	Shader cubeMapShader = Shader(shaderInput.sourceVCubeMap, shaderInput.sourceFCubeMap);
 
 	char pathCube[] = PATH_TO_OBJECTS "/cube.obj";
 	Object cubeMap(pathCube);

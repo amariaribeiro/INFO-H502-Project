@@ -9,7 +9,7 @@ if(COMPILE_SOLUTION)
 
 set(MAIN "main.cpp")
 
-add_executable(${PROJECT_NAME}_main ${MAIN} "main.cpp" "object.h" "shader.h" "camera.h")
+add_executable(${PROJECT_NAME}_main ${MAIN} "main.cpp" "object.h" "shader.h" "camera.h" "shaderInput.h" "lightInput.h")
 target_link_libraries(${PROJECT_NAME}_main PUBLIC OpenGL::GL glfw glad)
 
 endif()
