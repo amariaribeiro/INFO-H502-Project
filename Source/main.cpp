@@ -8,6 +8,8 @@
 #include<glm/gtc/type_ptr.hpp>
 #include<glm/gtc/matrix_inverse.hpp>
 
+#include <map>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -19,10 +21,12 @@
 const int width = 1000;
 const int height = 1000;
 
+//Shader shader;
 
 GLuint compileShader(std::string shaderCode, GLenum shaderType);
 GLuint compileProgram(GLuint vertexShader, GLuint fragmentShader);
 void processInput(GLFWwindow* window);
+void loadCubemapFace(const char* file, const GLenum& targetCube);
 
 void defineTexture(GLuint& texture, const char* path);
 
@@ -219,6 +223,40 @@ int main(int argc, char* argv[])
 
 	Shader earthShader = Shader(v_earth, f_earth);
 
+	const std::string sourceVCubeMap = "#version 330 core\n"
+		"in vec3 position; \n"
+		"in vec2 tex_coords; \n"
+		"in vec3 normal; \n"
+
+		//only P and V are necessary
+		"uniform mat4 V; \n"
+		"uniform mat4 P; \n"
+
+		"out vec3 texCoord_v; \n"
+
+		" void main(){ \n"
+		"texCoord_v = position;\n"
+		//remove translation info from view matrix to only keep rotation
+		"mat4 V_no_rot = mat4(mat3(V)) ;\n"
+		"vec4 pos = P * V_no_rot * vec4(position, 1.0); \n"
+		// the positions xyz are divided by w after the vertex shader
+		// the z component is equal to the depth value
+		// we want a z always equal to 1.0 here, so we set z = w!
+		// Remember: z=1.0 is the MAXIMUM depth value ;)
+		"gl_Position = pos.xyww;\n"
+		"\n"
+		"}\n";
+
+	const std::string sourceFCubeMap =
+		"#version 330 core\n"
+		"out vec4 FragColor;\n"
+		"precision mediump float; \n"
+		"uniform samplerCube cubemapSampler; \n"
+		"in vec3 texCoord_v; \n"
+		"void main() { \n"
+		"FragColor = texture(cubemapSampler,texCoord_v); \n"
+		"} \n";
+
 	Object moon1(path1);
 	moon1.makeObject(earthShader);
 	moon1.model = glm::translate(moon1.model, glm::vec3(1.0, 0.0, -3.0));
@@ -257,6 +295,43 @@ int main(int argc, char* argv[])
 	float diffuse = 1.0;
 	float specular = 0.9;
 
+
+	//CubeMap
+
+	Shader cubeMapShader = Shader(sourceVCubeMap, sourceFCubeMap);
+
+	char pathCube[] = PATH_TO_OBJECTS "/cube.obj";
+	Object cubeMap(pathCube);
+	cubeMap.makeObject(cubeMapShader);
+	
+	GLuint cubeMapTexture;
+	glGenTextures(1, &cubeMapTexture);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+
+	// texture parameters
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	//stbi_set_flip_vertically_on_load(true);
+
+	std::string pathToCubeMap = PATH_TO_TEXTURE "/cubemaps/sky/";
+
+	std::map<std::string, GLenum> facesToLoad = {
+		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_POSITIVE_X},
+		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_POSITIVE_Y},
+		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_POSITIVE_Z},
+		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_NEGATIVE_X},
+		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_NEGATIVE_Y},
+		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_NEGATIVE_Z},
+	};
+	//load the six faces
+	for (std::pair<std::string, GLenum> pair : facesToLoad) {
+		loadCubemapFace(pair.first.c_str(), pair.second);
+	}
 
 	//Rendering
 
@@ -322,10 +397,21 @@ int main(int argc, char* argv[])
 		//moon texture
 		glBindTexture(GL_TEXTURE_2D, moon_t);
 
+		glDepthFunc(GL_LEQUAL);
 		moon1.draw();
+
+		cubeMapShader.use();
+		cubeMapShader.setMatrix4("V", view);
+		cubeMapShader.setMatrix4("P", perspective);
+		cubeMapShader.setInteger("cubemapTexture", 0);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+		cubeMap.draw();
+		glDepthFunc(GL_LESS);
 
 
 		fps(now);
+
 		glfwSwapBuffers(window);
 
 	}
@@ -337,6 +423,23 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
+void loadCubemapFace(const char* path, const GLenum& targetFace)
+{
+	int imWidth, imHeight, imNrChannels;
+	unsigned char* data = stbi_load(path, &imWidth, &imHeight, &imNrChannels, 0);
+	if (data)
+	{
+
+		glTexImage2D(targetFace, 0, GL_RGB, imWidth, imHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		//glGenerateMipmap(targetFace);
+	}
+	else {
+		std::cout << "Failed to Load texture" << std::endl;
+		const char* reason = stbi_failure_reason();
+		std::cout << reason << std::endl;
+	}
+	stbi_image_free(data);
+}
 
 void processInput(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
