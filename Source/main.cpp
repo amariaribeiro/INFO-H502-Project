@@ -316,17 +316,17 @@ int main(int argc, char* argv[])
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	//stbi_set_flip_vertically_on_load(true);
+	stbi_set_flip_vertically_on_load(false);
 
-	std::string pathToCubeMap = PATH_TO_TEXTURE "/cubemaps/sky/";
+	std::string pathToCubeMap = PATH_TO_TEXTURE "/cubemaps/space/";
 
 	std::map<std::string, GLenum> facesToLoad = {
-		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_POSITIVE_X},
-		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_POSITIVE_Y},
-		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_POSITIVE_Z},
-		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_NEGATIVE_X},
-		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_NEGATIVE_Y},
-		{pathToCubeMap + "sky.jpg",GL_TEXTURE_CUBE_MAP_NEGATIVE_Z},
+		{pathToCubeMap + "space1.png",GL_TEXTURE_CUBE_MAP_POSITIVE_X}, 
+		{pathToCubeMap + "space5.png",GL_TEXTURE_CUBE_MAP_POSITIVE_Y}, 
+		{pathToCubeMap + "space2.png",GL_TEXTURE_CUBE_MAP_POSITIVE_Z}, 
+		{pathToCubeMap + "space3.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_X}, 
+		{pathToCubeMap + "space6.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_Y}, 
+		{pathToCubeMap + "space4.png",GL_TEXTURE_CUBE_MAP_NEGATIVE_Z}, 
 	};
 	//load the six faces
 	for (std::pair<std::string, GLenum> pair : facesToLoad) {
